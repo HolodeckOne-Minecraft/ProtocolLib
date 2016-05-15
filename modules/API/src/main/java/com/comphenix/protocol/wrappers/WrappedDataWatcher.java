@@ -17,7 +17,6 @@
 package com.comphenix.protocol.wrappers;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -39,6 +38,7 @@ import com.comphenix.protocol.reflect.accessors.Accessors;
 import com.comphenix.protocol.reflect.accessors.ConstructorAccessor;
 import com.comphenix.protocol.reflect.accessors.FieldAccessor;
 import com.comphenix.protocol.reflect.accessors.MethodAccessor;
+import com.comphenix.protocol.reflect.fuzzy.FuzzyFieldContract;
 import com.comphenix.protocol.reflect.fuzzy.FuzzyMethodContract;
 import com.comphenix.protocol.utility.MinecraftReflection;
 import com.comphenix.protocol.wrappers.collection.ConvertedMap;
@@ -68,8 +68,11 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	// ---- Construction
 
 	/**
-	 * Constructs a wrapped data watcher around an existing NMS data watcher.
-	 * @param handle NMS data watcher
+	 * Constructs a new DataWatcher wrapper around a NMS handle. The resulting
+	 * DataWatcher will likely have existing values that can be removed with
+	 * {@link #clear()}.
+	 * 
+	 * @param handle DataWatcher handle
 	 */
 	public WrappedDataWatcher(Object handle) {
 		super(HANDLE_TYPE);
@@ -77,18 +80,37 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	}
 
 	/**
-	 * Constructs a new DataWatcher using a fake entity.
+	 * Constructs a new DataWatcher using a fake lightning entity. The
+	 * resulting DataWatcher will not have any keys or values and new ones will
+	 * have to be added using watcher objects.
 	 */
 	public WrappedDataWatcher() {
 		this(newHandle(fakeEntity()));
 	}
 
 	/**
-	 * Constructs a new DataWatcher using a real entity.
+	 * Constructs a new DataWatcher using a real entity. The resulting
+	 * DataWatcher will not have any keys or values and new ones will have to
+	 * be added using watcher objects.
+	 * 
 	 * @param entity The entity
 	 */
 	public WrappedDataWatcher(Entity entity) {
 		this(newHandle(BukkitUnwrapper.getInstance().unwrapItem(entity)));
+	}
+
+	/**
+	 * Constructs a new DataWatcher using a fake lightning entity and a given
+	 * list of watchable objects.
+	 * 
+	 * @param objects The list of objects
+	 */
+	public WrappedDataWatcher(List<WrappedWatchableObject> objects) {
+		this();
+
+		for (WrappedWatchableObject object : objects) {
+			setObject(object.getWatcherObject(), object);
+		}
 	}
 
 	private static Object newHandle(Object entity) {
@@ -119,16 +141,10 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	private Map<Integer, Object> getMap() {
 		if (MAP_FIELD == null) {
 			FuzzyReflection fuzzy = FuzzyReflection.fromClass(handleType, true);
-			List<Field> candidates = fuzzy.getFieldListByType(Map.class);
-
-			for (Field candidate : candidates) {
-				if (Modifier.isStatic(candidate.getModifiers())) {
-					// This is the entity class to current index map, which we really don't have a use for
-				} else {
-					// This is the map we're looking for
-					MAP_FIELD = Accessors.getFieldAccessor(candidate);
-				}
-			}
+			MAP_FIELD = Accessors.getFieldAccessor(fuzzy.getField(FuzzyFieldContract.newBuilder()
+					.banModifier(Modifier.STATIC)
+					.typeDerivedOf(Map.class)
+					.build()));
 		}
 
 		if (MAP_FIELD == null) {
@@ -221,6 +237,14 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		return getMap().containsKey(index);
 	}
 
+	/**
+	 * Clears the contents of this DataWatcher. The watcher will be empty after
+	 * this operation is called.
+	 */
+	public void clear() {
+		getMap().clear();
+	}
+
 	// ---- Object Getters
 
 	/**
@@ -228,9 +252,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index - index of the watched byte.
 	 * @return The watched byte, or NULL if this value doesn't exist.
-	 * @throws FieldAccessException Cannot read underlying field.
 	 */
-	public Byte getByte(int index) throws FieldAccessException {
+	public Byte getByte(int index) {
 		return (Byte) getObject(index);
 	}
 
@@ -239,9 +262,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index - index of the watched short.
 	 * @return The watched short, or NULL if this value doesn't exist.
-	 * @throws FieldAccessException Cannot read underlying field.
 	 */
-	public Short getShort(int index) throws FieldAccessException {
+	public Short getShort(int index) {
 		return (Short) getObject(index);
 	}
 
@@ -250,9 +272,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index - index of the watched integer.
 	 * @return The watched integer, or NULL if this value doesn't exist.
-	 * @throws FieldAccessException Cannot read underlying field.
 	 */
-	public Integer getInteger(int index) throws FieldAccessException {
+	public Integer getInteger(int index) {
 		return (Integer) getObject(index);
 	}
 
@@ -261,9 +282,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index - index of the watched float.
 	 * @return The watched float, or NULL if this value doesn't exist.
-	 * @throws FieldAccessException Cannot read underlying field.
 	 */
-	public Float getFloat(int index) throws FieldAccessException {
+	public Float getFloat(int index) {
 		return (Float) getObject(index);
 	}
 
@@ -272,9 +292,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index - index of the watched string.
 	 * @return The watched string, or NULL if this value doesn't exist.
-	 * @throws FieldAccessException Cannot read underlying field.
 	 */
-	public String getString(int index) throws FieldAccessException {
+	public String getString(int index) {
 		return (String) getObject(index);
 	}
 
@@ -283,9 +302,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index - index of the watched string.
 	 * @return The watched string, or NULL if this value doesn't exist.
-	 * @throws FieldAccessException Cannot read underlying field.
 	 */
-	public ItemStack getItemStack(int index) throws FieldAccessException {
+	public ItemStack getItemStack(int index) {
 		return (ItemStack) getObject(index);
 	}
 
@@ -294,9 +312,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index - index of the watched string.
 	 * @return The watched string, or NULL if this value doesn't exist.
-	 * @throws FieldAccessException Cannot read underlying field.
 	 */
-	public WrappedChunkCoordinate getChunkCoordinate(int index) throws FieldAccessException {
+	public WrappedChunkCoordinate getChunkCoordinate(int index) {
 		return (WrappedChunkCoordinate) getObject(index);
 	}
 
@@ -306,7 +323,7 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * @param index Index of the object to retrieve.
 	 * @return The watched object.
 	 */
-	public Object getObject(int index) throws FieldAccessException {
+	public Object getObject(int index) {
 		return getObject(new WrappedDataWatcherObject(index, null));
 	}
 
@@ -320,7 +337,11 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		Validate.notNull(object, "Watcher object cannot be null!");
 
 		if (GETTER == null) {
-			GETTER = Accessors.getMethodAccessor(handleType, "get", object.getHandleType());
+			FuzzyReflection fuzzy = FuzzyReflection.fromClass(handleType);
+			GETTER = Accessors.getMethodAccessor(fuzzy.getMethod(FuzzyMethodContract.newBuilder()
+					.parameterExactType(object.getHandleType())
+					.returnTypeExact(Object.class)
+					.build(), "get"));
 		}
 
 		Object value = GETTER.invoke(handle, object.getHandle());
@@ -334,6 +355,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param index Index of the object to set
 	 * @param value New value
+	 * 
+	 * @see {@link #setObject(WrappedDataWatcherObject, Object)}
 	 */
 	public void setObject(int index, Object value) {
 		Validate.isTrue(hasIndex(index), "You cannot register objects without the watcher object!");
@@ -346,6 +369,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * @param index Index of the object to set
 	 * @param Serializer Serializer from {@link Serializer#get(Class)}
 	 * @param value New value
+	 * 
+	 * @see {@link #setObject(WrappedDataWatcherObject, Object)}
 	 */
 	public void setObject(int index, Serializer serializer, Object value) {
 		setObject(new WrappedDataWatcherObject(index, serializer), value);
@@ -356,34 +381,36 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	 * 
 	 * @param object Associated watcher object
 	 * @param value Wrapped value
+	 * 
+	 * @see {@link #setObject(WrappedDataWatcherObject, Object)}
 	 */
 	public void setObject(WrappedDataWatcherObject object, WrappedWatchableObject value) {
 		setObject(object, value.getRawValue());
 	}
 
 	/**
-	 * Sets the DataWatcher Item associated with a given watcher object to a new value.
+	 * Sets the DataWatcher Item associated with a given watcher object to a
+	 * new value. If there is not already an object at this index, the
+	 * specified watcher object must have a serializer.
 	 * 
 	 * @param object Associated watcher object
 	 * @param value New value
+	 * 
+	 * @throws IllegalArgumentException If the watcher object is null or must
+	 * 			have a serializer and does not have one.
 	 */
 	public void setObject(WrappedDataWatcherObject object, Object value) {
 		Validate.notNull(object, "Watcher object cannot be null!");
 
 		if (SETTER == null || REGISTER == null) {
 			FuzzyReflection fuzzy = FuzzyReflection.fromClass(handleType, true);
-			List<Method> methods = fuzzy.getMethodList(FuzzyMethodContract.newBuilder()
+			FuzzyMethodContract contract = FuzzyMethodContract.newBuilder()
 					.banModifier(Modifier.STATIC)
 					.requireModifier(Modifier.PUBLIC)
 					.parameterExactArray(object.getHandleType(), Object.class)
-					.build());
-			for (Method method : methods) {
-				if (method.getName().equals("set")) {
-					SETTER = Accessors.getMethodAccessor(method);
-				} else if (method.getName().equals("register")) {
-					REGISTER = Accessors.getMethodAccessor(method);
-				}
-			}
+					.build();
+			SETTER = Accessors.getMethodAccessor(fuzzy.getMethod(contract, "set"));
+			REGISTER = Accessors.getMethodAccessor(fuzzy.getMethod(contract, "register"));
 		}
 
 		if (hasIndex(object.getIndex())) {
@@ -512,7 +539,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	// ---- 1.9 classes
 
 	/**
-	 * Represents a DataWatcherObject in 1.9.
+	 * Represents a DataWatcherObject in 1.9. In order to register an object,
+	 * the serializer must be specified.
 	 * 
 	 * @author dmulloy2
 	 */
@@ -524,9 +552,9 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		private final StructureModifier<Object> modifier;
 
 		/**
-		 * Creates a new watcher object from a NMS handle
+		 * Creates a new watcher object from a NMS handle.
 		 * 
-		 * @param handle NMS handle
+		 * @param handle The handle
 		 */
 		public WrappedDataWatcherObject(Object handle) {
 			super(HANDLE_TYPE);
@@ -536,7 +564,7 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		}
 
 		/**
-		 * Creates a new watcher object from an index and serializer
+		 * Creates a new watcher object from an index and serializer.
 		 * 
 		 * @param index Index
 		 * @param serializer Serializer, see {@link Registry}
@@ -564,7 +592,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		}
 
 		/**
-		 * Gets this watcher object's serializer. Will return null if the serializer was never specified.
+		 * Gets this watcher object's serializer. Will return null if the
+		 * serializer was never specified.
 		 * 
 		 * @return The serializer, or null
 		 */
@@ -591,10 +620,24 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		public String toString() {
 			return "DataWatcherObject[index=" + getIndex() + ", serializer=" + getSerializer() + "]";
 		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this) return true;
+			if (obj == null) return false;
+
+			if (obj instanceof WrappedDataWatcherObject) {
+				WrappedDataWatcherObject other = (WrappedDataWatcherObject) obj;
+				return handle.equals(other.handle);
+			}
+
+			return false;
+		}
 	}
 
 	/**
-	 * Represents a DataWatcherSerializer in 1.9.
+	 * Represents a DataWatcherSerializer in 1.9. If a Serializer is optional,
+	 * values must be wrapped in a {@link Optional}.
 	 * 
 	 * @author dmulloy2
 	 */
@@ -629,7 +672,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		}
 
 		/**
-		 * Whether or not this serializer is optional, that is whether or not the return type is wrapped in a {@link Optional}.
+		 * Whether or not this serializer is optional, that is whether or not
+		 * the return type is wrapped in a {@link Optional}.
 		 * 
 		 * @return True if it is, false if not
 		 */
@@ -644,7 +688,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 	}
 
 	/**
-	 * Represents a DataWatcherRegistry containing the supported {@link Serializer}s in 1.9.
+	 * Represents a DataWatcherRegistry containing the supported
+	 * {@link Serializer}s in 1.9.
 	 *
 	 * <ul>
 	 *   <li>Byte</li>
@@ -668,14 +713,6 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		private static boolean INITIALIZED = false;
 		private static List<Serializer> REGISTRY = new ArrayList<>();
 
-		/**
-		 * Gets the serializer associated with a given class. </br>
-		 * <b>Note</b>: If {@link Serializer#isOptional()}, the values must be wrapped in {@link Optional}
-		 * 
-		 * @param clazz Class to find serializer for
-		 * @return The serializer, or null if none exists
-		 */
-		
 		/**
 		 * Gets the first serializer associated with a given class.
 		 *
@@ -704,7 +741,8 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 		/**
 		 * Gets the first serializer associated with a given class and optional state.
 		 * 
-		 * <p><b>Note</b>: If the serializer is optional, values <i>must<i> be wrapped in an {@link Optional}
+		 * <p><b>Note</b>: If the serializer is optional, values <i>must<i> be
+		 * wrapped in an {@link Optional}
 		 *
 		 * @param clazz Class to find serializer for
 		 * @param optional Optional state
@@ -726,7 +764,7 @@ public class WrappedDataWatcher extends AbstractWrapper implements Iterable<Wrap
 
 		/**
 		 * Gets the serializer associated with a given NMS handle.
-		 * @param handle The NMS handle
+		 * @param handle The handle
 		 * @return The serializer, or null if none exists
 		 */
 		public static Serializer fromHandle(Object handle) {

@@ -42,6 +42,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.WorldType;
 import org.bukkit.entity.Entity;
@@ -80,6 +81,9 @@ import com.comphenix.protocol.wrappers.EnumWrappers.ClientCommand;
 import com.comphenix.protocol.wrappers.EnumWrappers.CombatEventType;
 import com.comphenix.protocol.wrappers.EnumWrappers.Difficulty;
 import com.comphenix.protocol.wrappers.EnumWrappers.EntityUseAction;
+import com.comphenix.protocol.wrappers.EnumWrappers.EnumConverter;
+import com.comphenix.protocol.wrappers.EnumWrappers.Hand;
+import com.comphenix.protocol.wrappers.EnumWrappers.ItemSlot;
 import com.comphenix.protocol.wrappers.EnumWrappers.NativeGameMode;
 import com.comphenix.protocol.wrappers.EnumWrappers.Particle;
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerAction;
@@ -864,6 +868,61 @@ public class PacketContainer implements Serializable {
     	// Convert to and from the enums
     	return structureModifier.<SoundCategory>withType(
     			EnumWrappers.getSoundCategoryClass(), EnumWrappers.getSoundCategoryConverter());
+    }
+
+    /**
+     * Retrieve a read/write structure for the SoundEffect enum in 1.9.
+     * @return A modifier for SoundEffect enum fields.
+     */
+    public StructureModifier<Sound> getSoundEffects() {
+    	// Convert to and from Bukkit
+    	return structureModifier.<Sound>withType(
+    			MinecraftReflection.getSoundEffectClass(), BukkitConverters.getSoundConverter());
+    }
+
+    /**
+     * Retrive a read/write structure for the ItemSlot enum in 1.9.
+     * @return A modifier for ItemSlot enum fields.
+     */
+    public StructureModifier<ItemSlot> getItemSlots() {
+    	return structureModifier.<ItemSlot>withType(
+    			EnumWrappers.getItemSlotClass(), EnumWrappers.getItemSlotConverter());
+    }
+
+    /**
+     * Retrive a read/write structure for the Hand enum in 1.9.
+     * @return A modifier for Hand enum fields.
+     */
+    public StructureModifier<Hand> getHands() {
+    	return structureModifier.<Hand>withType(
+    			EnumWrappers.getHandClass(), EnumWrappers.getHandConverter());
+    }
+
+    /**
+     * Retrieve a read/write structure for an enum. This allows for the use of
+     * user-created enums that may not exist in ProtocolLib. The specific (user
+     * created) enum constants must match up perfectly with their generic (NMS)
+     * counterparts.
+     * 
+     * @param enumClass The specific Enum class
+     * @param nmsClass The generic Enum class
+     * @return The modifier
+     */
+    public <T extends Enum<T>> StructureModifier<T> getEnumModifier(Class<T> enumClass, Class<?> nmsClass) {
+    	return structureModifier.<T>withType(nmsClass, new EnumConverter<T>(enumClass));
+    }
+
+    /**
+     * Retrieve a read/write structure for an enum. This method is for convenience,
+     * see {@link #getEnumModifier(Class, Class)} for more information.
+     * 
+     * @param enumClass The specific Enum class
+     * @param index Index of the generic Enum
+     * @return The modifier
+     * @see #getEnumModifier(Class, Class)
+     */
+    public <T extends Enum<T>> StructureModifier<T> getEnumModifier(Class<T> enumClass, int index) {
+    	return getEnumModifier(enumClass, structureModifier.getField(index).getType());
     }
 
 	/**

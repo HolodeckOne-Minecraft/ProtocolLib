@@ -46,6 +46,7 @@ import org.bukkit.inventory.ItemStack;
 
 import com.comphenix.protocol.PacketType;
 import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.ProtocolLogger;
 import com.comphenix.protocol.error.ErrorReporter;
 import com.comphenix.protocol.error.Report;
 import com.comphenix.protocol.error.ReportType;
@@ -208,7 +209,7 @@ public class MinecraftReflection {
 					if (MinecraftVersion.SCARY_UPDATE.compareTo(version) <= 0) {
 						 // Just assume R1 - it's probably fine
 						packageVersion = "v" + version.getMajor() + "_" + version.getMinor() + "_R1";
-						ProtocolLibrary.log(Level.WARNING, "Assuming package version: " + packageVersion);
+						ProtocolLogger.log(Level.WARNING, "Assuming package version: " + packageVersion);
 					}
 				}
 
@@ -1344,6 +1345,16 @@ public class MinecraftReflection {
 	public static Class<?> getMobEffectListClass() {
 		// TODO Implement a fallback
 		return getMinecraftClass("MobEffectList");
+	}
+
+	public static Class<?> getSoundEffectClass() {
+		try {
+			return getMinecraftClass("SoundEffect");
+		} catch (RuntimeException ex) {
+			FuzzyReflection fuzzy = FuzzyReflection.fromClass(PacketType.Play.Server.NAMED_SOUND_EFFECT.getPacketClass(), true);
+			Field field = fuzzy.getFieldByType("(.*)(Sound)(.*)");
+			return setMinecraftClass("SoundEffect", field.getType());
+		}
 	}
 
 	/**

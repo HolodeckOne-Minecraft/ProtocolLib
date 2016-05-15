@@ -28,20 +28,22 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-import net.minecraft.server.v1_9_R1.AttributeModifier;
-import net.minecraft.server.v1_9_R1.DataWatcher;
-import net.minecraft.server.v1_9_R1.Entity;
-import net.minecraft.server.v1_9_R1.EntityLightning;
-import net.minecraft.server.v1_9_R1.MobEffect;
-import net.minecraft.server.v1_9_R1.MobEffectList;
-import net.minecraft.server.v1_9_R1.PacketPlayOutUpdateAttributes;
-import net.minecraft.server.v1_9_R1.PacketPlayOutUpdateAttributes.AttributeSnapshot;
+import net.minecraft.server.v1_9_R2.AttributeModifier;
+import net.minecraft.server.v1_9_R2.DataWatcher;
+import net.minecraft.server.v1_9_R2.Entity;
+import net.minecraft.server.v1_9_R2.EntityLightning;
+import net.minecraft.server.v1_9_R2.MobEffect;
+import net.minecraft.server.v1_9_R2.MobEffectList;
+import net.minecraft.server.v1_9_R2.PacketPlayOutBoss;
+import net.minecraft.server.v1_9_R2.PacketPlayOutUpdateAttributes;
+import net.minecraft.server.v1_9_R2.PacketPlayOutUpdateAttributes.AttributeSnapshot;
 
 import org.apache.commons.lang.SerializationUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.bukkit.ChatColor;
 import org.bukkit.DyeColor;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.WorldType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -176,13 +178,6 @@ public class PacketContainerTest {
 	public void testGetStringArrays() {
 		PacketContainer tabComplete = new PacketContainer(PacketType.Play.Server.TAB_COMPLETE);
 		testObjectArray(tabComplete.getStringArrays(), 0, new String[0], new String[] { "hello", "world" });
-	}
-
-	@Test
-	public void testGetChatComponentArrays() {
-		PacketContainer signChange = new PacketContainer(PacketType.Play.Server.UPDATE_SIGN);
-		testObjectArray(signChange.getChatComponentArrays(), 0, new WrappedChatComponent[0],
-				WrappedChatComponent.fromChatMessage("hello world"));
 	}
 
 	@Test
@@ -353,15 +348,19 @@ public class PacketContainerTest {
 
 		assertNull(watchableAccessor.read(0));
 
-		Entity entity = new EntityLightning(null, 0, 0, 0, true);
-		DataWatcher watcher = entity.getDataWatcher();
+		WrappedDataWatcher watcher = new WrappedDataWatcher();
+		watcher.setObject(0, Registry.get(String.class), "Test");
+		watcher.setObject(1, Registry.get(Byte.class), (byte) 21);
 
-		WrappedDataWatcher wrapper = new WrappedDataWatcher(watcher);
-		List<WrappedWatchableObject> list = wrapper.getWatchableObjects();
+		List<WrappedWatchableObject> list = watcher.getWatchableObjects();
 
 		// Insert and read back
 		watchableAccessor.write(0, list);
 		assertEquals(list, watchableAccessor.read(0));
+
+		// Put it into a new data watcher
+		WrappedDataWatcher newWatcher = new WrappedDataWatcher(watchableAccessor.read(0));
+		assertEquals(newWatcher.getWatchableObjects(), list);
 	}
 
 	@Test
@@ -490,6 +489,35 @@ public class PacketContainerTest {
 		container.getSoundCategories().write(0, SoundCategory.PLAYERS);
 
 		assertEquals(container.getSoundCategories().read(0), SoundCategory.PLAYERS);
+	}
+
+	@Test
+	public void testSoundEffects() {
+		PacketContainer container = new PacketContainer(PacketType.Play.Server.NAMED_SOUND_EFFECT);
+		container.getSoundEffects().write(0, Sound.ENTITY_CAT_HISS);
+
+		assertEquals(container.getSoundEffects().read(0), Sound.ENTITY_CAT_HISS);
+	}
+
+	@Test
+	public void testGenericEnums() {
+		PacketContainer container = new PacketContainer(PacketType.Play.Server.BOSS);
+		container.getEnumModifier(Action.class, 1).write(0, Action.UPDATE_PCT);
+
+		assertEquals(container.getEnumModifier(Action.class, PacketPlayOutBoss.Action.class).read(0), Action.UPDATE_PCT);
+	}
+
+	/**
+	 * Actions from the outbound Boss packet. Used for testing generic enums.
+	 * @author dmulloy2
+	 */
+	public static enum Action {
+		ADD,
+		REMOVE,
+		UPDATE_PCT,
+		UPDATE_NAME,
+		UPDATE_STYLE,
+		UPDATE_PROPERTIES;
 	}
 
 	private static final List<PacketType> BLACKLISTED = Util.asList(
