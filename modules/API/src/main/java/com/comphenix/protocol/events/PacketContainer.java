@@ -17,9 +17,6 @@
 
 package com.comphenix.protocol.events;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.UnpooledByteBufAllocator;
-
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -36,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 
 import javax.annotation.Nonnull;
@@ -80,6 +78,7 @@ import com.comphenix.protocol.wrappers.EnumWrappers.ChatVisibility;
 import com.comphenix.protocol.wrappers.EnumWrappers.ClientCommand;
 import com.comphenix.protocol.wrappers.EnumWrappers.CombatEventType;
 import com.comphenix.protocol.wrappers.EnumWrappers.Difficulty;
+import com.comphenix.protocol.wrappers.EnumWrappers.Direction;
 import com.comphenix.protocol.wrappers.EnumWrappers.EntityUseAction;
 import com.comphenix.protocol.wrappers.EnumWrappers.EnumConverter;
 import com.comphenix.protocol.wrappers.EnumWrappers.Hand;
@@ -105,10 +104,15 @@ import com.comphenix.protocol.wrappers.WrappedServerPing;
 import com.comphenix.protocol.wrappers.WrappedStatistic;
 import com.comphenix.protocol.wrappers.WrappedWatchableObject;
 import com.comphenix.protocol.wrappers.nbt.NbtBase;
+import com.comphenix.protocol.wrappers.nbt.NbtCompound;
+import com.comphenix.protocol.wrappers.nbt.NbtFactory;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.UnpooledByteBufAllocator;
 
 /**
  * Represents a Minecraft packet indirectly.
@@ -330,7 +334,15 @@ public class PacketContainer implements Serializable {
 	public StructureModifier<String> getStrings() {
 		return structureModifier.withType(String.class);
 	}
-	
+
+	/**
+	 * Retrieves a read/write structure for every UUID field.
+	 * @return A modifier for every UUID field.
+	 */
+	public StructureModifier<UUID> getUUIDs() {
+		return structureModifier.withType(UUID.class);
+	}
+
 	/**
 	 * Retrieves a read/write structure for every String array field.
 	 * @return A modifier for every String array field.
@@ -366,7 +378,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for ItemStack.
 	 * <p>
-	 * This modifier will automatically marshall between the Bukkit ItemStack and the
+	 * This modifier will automatically marshal between the Bukkit ItemStack and the
 	 * internal Minecraft ItemStack.
 	 * @return A modifier for ItemStack fields.
 	 */
@@ -379,7 +391,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for arrays of ItemStacks.
 	 * <p>
-	 * This modifier will automatically marshall between the Bukkit ItemStack and the
+	 * This modifier will automatically marshal between the Bukkit ItemStack and the
 	 * internal Minecraft ItemStack.
 	 * @return A modifier for ItemStack array fields.
 	 */
@@ -408,7 +420,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for the world type enum.
 	 * <p>
-	 * This modifier will automatically marshall between the Bukkit world type and the
+	 * This modifier will automatically marshal between the Bukkit world type and the
 	 * internal Minecraft world type.
 	 * @return A modifier for world type fields.
 	 */
@@ -509,6 +521,21 @@ public class PacketContainer implements Serializable {
 	}
 
 	/**
+	 * Retrieves a read/write structure for lists of NBT classes.
+	 * @return A modifier for lists of NBT classes.
+	 */
+	public StructureModifier<List<NbtBase<?>>> getListNbtModifier() {
+		// Convert to and from the ProtocolLib wrapper
+		return structureModifier.withType(
+				Collection.class,
+				BukkitConverters.getListConverter(
+						MinecraftReflection.getNBTBaseClass(),
+						BukkitConverters.getNbtConverter()
+				)
+		);
+	}
+
+	/**
 	 * Retrieves a read/write structure for Vectors.
 	 * @return A modifier for Vectors.
 	 */
@@ -522,7 +549,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for collections of attribute snapshots.
 	 * <p>
-	 * This modifier will automatically marshall between the visible ProtocolLib WrappedAttribute and the
+	 * This modifier will automatically marshal between the visible ProtocolLib WrappedAttribute and the
 	 * internal Minecraft AttributeSnapshot.
 	 * @return A modifier for AttributeSnapshot collection fields.
 	 */
@@ -539,7 +566,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for collections of chunk positions.
 	 * <p>
-	 * This modifier will automatically marshall between the visible ProtocolLib ChunkPosition and the
+	 * This modifier will automatically marshal between the visible ProtocolLib ChunkPosition and the
 	 * internal Minecraft ChunkPosition.
 	 * 
 	 * @return A modifier for ChunkPosition list fields.
@@ -557,7 +584,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for collections of chunk positions.
 	 * <p>
-	 * This modifier will automatically marshall between the visible ProtocolLib BlockPosition and the
+	 * This modifier will automatically marshal between the visible ProtocolLib BlockPosition and the
 	 * internal Minecraft BlockPosition.
 	 *
 	 * @return A modifier for ChunkPosition list fields.
@@ -575,7 +602,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for collections of watchable objects.
 	 * <p>
-	 * This modifier will automatically marshall between the visible WrappedWatchableObject and the
+	 * This modifier will automatically marshal between the visible WrappedWatchableObject and the
 	 * internal Minecraft WatchableObject.
 	 * @return A modifier for watchable object list fields.
 	 */
@@ -592,7 +619,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for block fields.
 	 * <p>
-	 * This modifier will automatically marshall between Material and the
+	 * This modifier will automatically marshal between Material and the
 	 * internal Minecraft Block.
 	 * @return A modifier for GameProfile fields.
 	 */
@@ -605,7 +632,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for game profiles in Minecraft 1.7.2.
 	 * <p>
-	 * This modifier will automatically marshall between WrappedGameProfile and the
+	 * This modifier will automatically marshal between WrappedGameProfile and the
 	 * internal Minecraft GameProfile.
 	 * @return A modifier for GameProfile fields.
 	 */
@@ -618,7 +645,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for BlockData in Minecraft 1.8.
 	 * <p>
-	 * This modifier will automatically marshall between WrappedBlockData and the
+	 * This modifier will automatically marshal between WrappedBlockData and the
 	 * internal Minecraft IBlockData.
 	 * @return A modifier for BlockData fields.
 	 */
@@ -631,7 +658,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for MultiBlockChangeInfo arrays in Minecraft 1.8.
 	 * <p>
-	 * This modifier will automatically marshall between MultiBlockChangeInfo and the
+	 * This modifier will automatically marshal between MultiBlockChangeInfo and the
 	 * internal Minecraft MultiBlockChangeInfo.
 	 * @return A modifier for BlockData fields.
 	 */
@@ -646,7 +673,7 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for chat components in Minecraft 1.7.2.
 	 * <p>
-	 * This modifier will automatically marshall between WrappedChatComponent and the
+	 * This modifier will automatically marshal between WrappedChatComponent and the
 	 * internal Minecraft IChatBaseComponent.
 	 * @return A modifier for ChatComponent fields.
 	 */
@@ -659,15 +686,19 @@ public class PacketContainer implements Serializable {
 	/**
 	 * Retrieves a read/write structure for arrays of chat components.
 	 * <p>
-	 * This modifier will automatically marshall between WrappedChatComponent and the
-	 * internal Minecraft IChatBaseComponent.
+	 * This modifier will automatically marshal between WrappedChatComponent and the
+	 * internal Minecraft IChatBaseComponent (1.9.2 and below) or the internal
+	 * NBTCompound (1.9.4 and up).
+	 * <p>
+	 * Note that in 1.9.4 and up this modifier only works properly with sign
+	 * tile entities.
 	 * @return A modifier for ChatComponent array fields.
 	 */
 	public StructureModifier<WrappedChatComponent[]> getChatComponentArrays() {
 		// Convert to and from the Bukkit wrapper
 		return structureModifier.<WrappedChatComponent[]>withType(
-				MinecraftReflection.getIChatBaseComponentArrayClass(),
-				BukkitConverters.getIgnoreNull(new WrappedChatComponentArrayConverter()));
+				ComponentArrayConverter.getGenericType(),
+				BukkitConverters.getIgnoreNull(new ComponentArrayConverter()));
 	}
 	
 	/**
@@ -881,7 +912,7 @@ public class PacketContainer implements Serializable {
     }
 
     /**
-     * Retrive a read/write structure for the ItemSlot enum in 1.9.
+     * Retrieve a read/write structure for the ItemSlot enum in 1.9.
      * @return A modifier for ItemSlot enum fields.
      */
     public StructureModifier<ItemSlot> getItemSlots() {
@@ -890,12 +921,21 @@ public class PacketContainer implements Serializable {
     }
 
     /**
-     * Retrive a read/write structure for the Hand enum in 1.9.
+     * Retrieve a read/write structure for the Hand enum in 1.9.
      * @return A modifier for Hand enum fields.
      */
     public StructureModifier<Hand> getHands() {
     	return structureModifier.<Hand>withType(
     			EnumWrappers.getHandClass(), EnumWrappers.getHandConverter());
+    }
+
+    /**
+     * Retrieve a read/write structure for the Direction enum in 1.10.
+     * @return A modifier for Direction enum fields.
+     */
+    public StructureModifier<Direction> getDirections() {
+    	return structureModifier.<Direction>withType(
+    			EnumWrappers.getDirectionClass(), EnumWrappers.getDirectionConverter());
     }
 
     /**
@@ -923,7 +963,7 @@ public class PacketContainer implements Serializable {
      */
     public <T extends Enum<T>> StructureModifier<T> getEnumModifier(Class<T> enumClass, int index) {
     	return getEnumModifier(enumClass, structureModifier.getField(index).getType());
-    }
+	}
 
 	/**
 	 * Retrieves the ID of this packet.
@@ -1076,7 +1116,7 @@ public class PacketContainer implements Serializable {
 	 * Construct a new packet data serializer.
 	 * @return The packet data serializer.
 	 */
-	private ByteBuf createPacketBuffer() {
+	public static ByteBuf createPacketBuffer() {
 		ByteBuf buffer = UnpooledByteBufAllocator.DEFAULT.buffer();
 		Class<?> packetSerializer = MinecraftReflection.getPacketDataSerializerClass();
 
@@ -1224,11 +1264,11 @@ public class PacketContainer implements Serializable {
 	 * Represents an equivalent converter for ChatComponent arrays.
 	 * @author dmulloy2
 	 */
-	private static class WrappedChatComponentArrayConverter implements EquivalentConverter<WrappedChatComponent[]> {
+	private static class LegacyComponentConverter implements EquivalentConverter<WrappedChatComponent[]> {
 		final EquivalentConverter<WrappedChatComponent> componentConverter = BukkitConverters.getWrappedChatComponentConverter();
 		
 		@Override
-		public Object getGeneric(Class<?>genericType, WrappedChatComponent[] specific) {
+		public Object getGeneric(Class<?> genericType, WrappedChatComponent[] specific) {
 			Class<?> nmsComponent = MinecraftReflection.getIChatBaseComponentClass();
 			Object[] result = (Object[]) Array.newInstance(nmsComponent, specific.length);
 			
@@ -1254,6 +1294,93 @@ public class PacketContainer implements Serializable {
 		@Override
 		public Class<WrappedChatComponent[]> getSpecificType() {
 			return WrappedChatComponent[].class;
+		}
+	}
+
+	/**
+	 * Converts from NBT to WrappedChatComponent arrays
+	 * @author dmulloy2
+	 */
+	private static class NBTComponentConverter implements EquivalentConverter<WrappedChatComponent[]> {
+		private EquivalentConverter<NbtBase<?>> nbtConverter = BukkitConverters.getNbtConverter();
+		private final int lines = 4;
+
+		@Override
+		public WrappedChatComponent[] getSpecific(Object generic) {
+			NbtBase<?> nbtBase = nbtConverter.getSpecific(generic);
+			NbtCompound compound = (NbtCompound) nbtBase;
+
+			WrappedChatComponent[] components = new WrappedChatComponent[lines];
+			for (int i = 0; i < lines; i++) {
+				if (compound.containsKey("Text" + (i + 1))) {
+					components[i] = WrappedChatComponent.fromJson(compound.getString("Text" + (i + 1)));
+				} else {
+					components[i] = WrappedChatComponent.fromText("");
+				}
+			}
+
+			return components;
+		}
+
+		@Override
+		public Object getGeneric(Class<?> genericType, WrappedChatComponent[] specific) {
+			NbtCompound compound = NbtFactory.ofCompound("");
+
+			for (int i = 0; i < lines; i++) {
+				WrappedChatComponent component;
+				if (i < specific.length && specific[i] != null) {
+					component = specific[i];
+				} else {
+					component = WrappedChatComponent.fromText("");
+				}
+
+				compound.put("Text" + (i + 1), component.getJson());
+			}
+
+			return nbtConverter.getGeneric(genericType, compound);
+		}
+
+		@Override
+		public Class<WrappedChatComponent[]> getSpecificType() {
+			return WrappedChatComponent[].class;
+		}
+	}
+
+	/**
+	 * A delegated converter that supports NBT to Component Array and regular Component Array
+	 * @author dmulloy2
+	 */
+	private static class ComponentArrayConverter implements EquivalentConverter<WrappedChatComponent[]> {
+		private static final EquivalentConverter<WrappedChatComponent[]> DELEGATE;
+		static {
+			if (!PacketType.Play.Server.UPDATE_SIGN.isDeprecated()) {
+				DELEGATE = new LegacyComponentConverter();
+			} else {
+				DELEGATE = new NBTComponentConverter();
+			}
+		}
+
+		@Override
+		public WrappedChatComponent[] getSpecific(Object generic) {
+			return DELEGATE.getSpecific(generic);
+		}
+
+		@Override
+		public Object getGeneric(Class<?> genericType, WrappedChatComponent[] specific) {
+			return DELEGATE.getGeneric(genericType, specific);
+		}
+
+		@Override
+		public Class<WrappedChatComponent[]> getSpecificType() {
+			return DELEGATE.getSpecificType();
+		}
+
+		public static Class<?> getGenericType() {
+			if (DELEGATE instanceof NBTComponentConverter) {
+				return MinecraftReflection.getNBTCompoundClass();
+			} else {
+				return MinecraftReflection.getIChatBaseComponentArrayClass();
+			}
 		}
 	}
 

@@ -520,6 +520,19 @@ public class PacketContainerTest {
 		UPDATE_PROPERTIES;
 	}
 
+	@Test
+	public void testComponentArrays() {
+		PacketContainer signChange = new PacketContainer(PacketType.Play.Server.TILE_ENTITY_DATA);
+		WrappedChatComponent[] components = new WrappedChatComponent[] {
+				WrappedChatComponent.fromText("hello world"), WrappedChatComponent.fromText(""),
+				WrappedChatComponent.fromText(""), WrappedChatComponent.fromText("")
+		};
+		signChange.getChatComponentArrays().write(0, components);
+
+		WrappedChatComponent[] back = signChange.getChatComponentArrays().read(0);
+		assertArrayEquals(components, back);
+	}
+
 	private static final List<PacketType> BLACKLISTED = Util.asList(
 			PacketType.Play.Client.CUSTOM_PAYLOAD, PacketType.Play.Server.CUSTOM_PAYLOAD,
 			PacketType.Play.Server.SET_COOLDOWN
@@ -529,7 +542,7 @@ public class PacketContainerTest {
 	public void testDeepClone() {
 		// Try constructing all the packets
 		for (PacketType type : PacketType.values()) {
-			if (BLACKLISTED.contains(type)) {
+			if (BLACKLISTED.contains(type) || type.isDeprecated()) {
 				continue;
 			}
 
@@ -575,9 +588,7 @@ public class PacketContainerTest {
 				}
 			} catch (IllegalArgumentException e) {
 				if (!registered) {
-					// Let the test pass
-					System.err.println("The packet ID " + type + " is not registered.");
-					assertEquals(e.getMessage(), "The packet ID " + type + " is not registered.");
+					e.printStackTrace();
 				} else {
 					// Something is very wrong
 					throw e;
