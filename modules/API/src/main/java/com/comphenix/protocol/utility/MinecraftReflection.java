@@ -41,6 +41,7 @@ import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.Server;
 import org.bukkit.inventory.ItemStack;
 
@@ -62,8 +63,8 @@ import com.comphenix.protocol.reflect.fuzzy.FuzzyClassContract;
 import com.comphenix.protocol.reflect.fuzzy.FuzzyFieldContract;
 import com.comphenix.protocol.reflect.fuzzy.FuzzyMatchers;
 import com.comphenix.protocol.reflect.fuzzy.FuzzyMethodContract;
-import com.comphenix.protocol.utility.RemappedClassSource.RemapperUnavaibleException;
-import com.comphenix.protocol.utility.RemappedClassSource.RemapperUnavaibleException.Reason;
+import com.comphenix.protocol.utility.RemappedClassSource.RemapperUnavailableException;
+import com.comphenix.protocol.utility.RemappedClassSource.RemapperUnavailableException.Reason;
 import com.comphenix.protocol.wrappers.nbt.NbtFactory;
 import com.comphenix.protocol.wrappers.nbt.NbtType;
 import com.google.common.base.Joiner;
@@ -128,13 +129,13 @@ public class MinecraftReflection {
 	private static String packageVersion;
 
 	// Item stacks
-	private static Method craftNMSMethod;
+	/* private static Method craftNMSMethod;
 	private static Method craftBukkitNMS;
 	private static Method craftBukkitOBC;
 	private static boolean craftItemStackFailed;
 
 	private static Constructor<?> craftNMSConstructor;
-	private static Constructor<?> craftBukkitConstructor;
+	private static Constructor<?> craftBukkitConstructor; */
 
 	// net.minecraft.server
 	private static Class<?> itemStackArrayClass;
@@ -933,6 +934,9 @@ public class MinecraftReflection {
 			return getMinecraftClass("MinecraftServer");
 		} catch (RuntimeException e) {
 			useFallbackServer();
+
+			// Reset cache and try again
+			setMinecraftClass("MinecraftServer", null);
 			return getMinecraftClass("MinecraftServer");
 		}
 	}
@@ -981,8 +985,10 @@ public class MinecraftReflection {
 		try {
 			return getMinecraftClass("ServerConfigurationManager", "PlayerList");
 		} catch (RuntimeException e) {
-			// Try again
 			useFallbackServer();
+
+			// Reset cache and try again
+			setMinecraftClass("ServerConfigurationManager", null);
 			return getMinecraftClass("ServerConfigurationManager");
 		}
 	}
@@ -1627,8 +1633,10 @@ public class MinecraftReflection {
 		try {
 			return getMinecraftClass("AttributeModifier");
 		} catch (RuntimeException e) {
-			// Initialize first
 			getAttributeSnapshotClass();
+
+			// Reset cache and try again
+			setMinecraftClass("AttributeModifier", null);
 			return getMinecraftClass("AttributeModifier");
 		}
 	}
@@ -1835,12 +1843,16 @@ public class MinecraftReflection {
 		}
 	}
 
+	public static Class<?> getNonNullListClass() {
+		return getMinecraftClass("NonNullList");
+	}
+
 	/**
 	 * Retrieve a CraftItemStack from a given ItemStack.
 	 * @param bukkitItemStack - the Bukkit ItemStack to convert.
 	 * @return A CraftItemStack as an ItemStack.
 	 */
-	public static ItemStack getBukkitItemStack(ItemStack bukkitItemStack) {
+	/* public static ItemStack getBukkitItemStack(ItemStack bukkitItemStack) {
 		// Delegate this task to the method that can execute it
 		if (craftBukkitNMS != null)
 			return getBukkitItemByMethod(bukkitItemStack);
@@ -1890,7 +1902,7 @@ public class MinecraftReflection {
 	 * @param minecraftItemStack - the NMS ItemStack to wrap.
 	 * @return The wrapped ItemStack.
 	 */
-	public static ItemStack getBukkitItemStack(Object minecraftItemStack) {
+	/* public static ItemStack getBukkitItemStack(Object minecraftItemStack) {
 		// Delegate this task to the method that can execute it
 		if (craftNMSMethod != null)
 			return getBukkitItemByMethod(minecraftItemStack);
@@ -1941,13 +1953,104 @@ public class MinecraftReflection {
 	 * @param stack - the Bukkit ItemStack to convert.
 	 * @return The NMS ItemStack, or NULL if the stack represents air.
 	 */
-	public static Object getMinecraftItemStack(ItemStack stack) {
+	/* public static Object getMinecraftItemStack(ItemStack stack) {
 		// Make sure this is a CraftItemStack
 		if (!isCraftItemStack(stack))
 			stack = getBukkitItemStack(stack);
 
 		BukkitUnwrapper unwrapper = new BukkitUnwrapper();
 		return unwrapper.unwrapItem(stack);
+	} */
+
+	// ---- ItemStack conversions
+
+	private static Method asNMSCopy = null;
+	private static Method asCraftMirror = null;
+
+	private static Boolean nullEnforced = null;
+	private static Method isEmpty = null;
+
+	/**
+	 * Retrieves the Bukkit equivalent of a NMS ItemStack. This method should
+	 * preserve NBT data and will never return null when supplied with a valid
+	 * ItemStack. Empty ItemStacks are returned as AIR.
+	 * 
+	 * @param generic NMS ItemStack
+	 * @return The Bukkit equivalent
+	 */
+	public static ItemStack getBukkitItemStack(Object generic) {
+		// Make sure it actually is an ItemStack
+		if (!is(getItemStackClass(), generic)) {
+			return null;
+		}
+
+		// Convert null to AIR
+		if (generic == null) {
+			return new ItemStack(Material.AIR);
+		}
+
+		// Check null enforcement
+		try {
+			if (nullEnforced == null) {
+				isEmpty = getItemStackClass().getMethod("isEmpty");
+				nullEnforced = true;
+			}
+
+			if (nullEnforced) {
+				if ((boolean) isEmpty.invoke(generic)) {
+					return new ItemStack(Material.AIR);
+				}
+			}
+		} catch (ReflectiveOperationException ex) {
+			nullEnforced = false;
+		}
+
+		// Find asCraftMirror
+		if (asCraftMirror == null) {
+			try {
+				asCraftMirror = getCraftItemStackClass().getMethod("asCraftMirror", getItemStackClass());
+			} catch (ReflectiveOperationException ex) {
+				throw new RuntimeException("Failed to obtain CraftItemStack.asCraftMirror", ex);
+			}
+		}
+
+		// Convert to a craft mirror to preserve NBT data
+		try {
+			return (ItemStack) asCraftMirror.invoke(nullEnforced, generic);
+		} catch (ReflectiveOperationException ex) {
+			throw new RuntimeException("Failed to obtain craft mirror of " + generic, ex);
+		}
+	}
+
+	/**
+	 * Retrieves the NMS equivalent of a Bukkit ItemStack. This method will
+	 * never return null and should preserve NBT data. Null inputs are treated
+	 * as empty (AIR) ItemStacks.
+	 * 
+	 * @param specific Bukkit ItemStack
+	 * @return The NMS equivalent
+	 */
+	public static Object getMinecraftItemStack(ItemStack specific) {
+		// Grab asNMSCopy first
+		if (asNMSCopy == null) {
+			try {
+				asNMSCopy = getCraftItemStackClass().getMethod("asNMSCopy", ItemStack.class);
+			} catch (ReflectiveOperationException ex) {
+				throw new RuntimeException("Failed to obtain CraftItemStack.asNMSCopy", ex);
+			}
+		}
+
+		// If it's already a CraftItemStack, use its handle
+		if (is(getCraftItemStackClass(), specific)) {
+			return new BukkitUnwrapper().unwrapItem(specific);
+		}
+
+		// If it's not, grab a NMS copy
+		try {
+			return asNMSCopy.invoke(null, specific);
+		} catch (ReflectiveOperationException ex) {
+			throw new RuntimeException("Failed to make NMS copy of " + specific, ex);
+		}
 	}
 
 	/**
@@ -2012,7 +2115,7 @@ public class MinecraftReflection {
 			// Attempt to use MCPC
 			try {
 				return classSource = new RemappedClassSource().initialize();
-			} catch (RemapperUnavaibleException e) {
+			} catch (RemapperUnavailableException e) {
 				if (e.getReason() != Reason.MCPC_NOT_PRESENT)
 					reporter.reportWarning(MinecraftReflection.class, Report.newBuilder(REPORT_CANNOT_FIND_MCPC_REMAPPER));
 			} catch (Exception e) {
