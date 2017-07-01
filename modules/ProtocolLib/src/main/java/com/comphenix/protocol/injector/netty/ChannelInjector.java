@@ -16,19 +16,6 @@
  */
 package com.comphenix.protocol.injector.netty;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.ByteToMessageDecoder;
-import io.netty.handler.codec.MessageToByteEncoder;
-import io.netty.util.concurrent.GenericFutureListener;
-import io.netty.util.internal.TypeParameterMatcher;
-
 import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -55,7 +42,6 @@ import com.comphenix.protocol.events.ConnectionSide;
 import com.comphenix.protocol.events.NetworkMarker;
 import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.injector.NetworkProcessor;
-import com.comphenix.protocol.injector.netty.WirePacket;
 import com.comphenix.protocol.injector.server.SocketInjector;
 import com.comphenix.protocol.reflect.FuzzyReflection;
 import com.comphenix.protocol.reflect.VolatileField;
@@ -69,6 +55,20 @@ import com.comphenix.protocol.utility.MinecraftReflection;
 import com.comphenix.protocol.wrappers.WrappedGameProfile;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.MapMaker;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelPromise;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.MessageToByteEncoder;
+import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.GenericFutureListener;
+import io.netty.util.internal.TypeParameterMatcher;
 
 /**
  * Represents a channel injector.
@@ -90,6 +90,10 @@ public class ChannelInjector extends ByteToMessageDecoder implements Injector {
 	private static Class<?> PACKET_LOGIN_CLIENT = null;
 	private static FieldAccessor LOGIN_GAME_PROFILE = null;
 
+	// Versioning
+	private static Class<?> PACKET_SET_PROTOCOL = null;
+	private static AttributeKey<Integer> PROTOCOL_KEY = AttributeKey.valueOf("PROTOCOL");
+
 	// Saved accessors
 	private static MethodAccessor DECODE_BUFFER;
 	private static MethodAccessor ENCODE_BUFFER;
@@ -97,9 +101,6 @@ public class ChannelInjector extends ByteToMessageDecoder implements Injector {
 
 	// For retrieving the protocol
 	private static FieldAccessor PROTOCOL_ACCESSOR;
-
-	// For retrieving the protocol version
-	private static MethodAccessor PROTOCOL_VERSION;
 
 	// The factory that created this injector
 	private InjectionFactory factory;
@@ -185,19 +186,8 @@ public class ChannelInjector extends ByteToMessageDecoder implements Injector {
 	 */
 	@Override
 	public int getProtocolVersion() {
-		MethodAccessor accessor = PROTOCOL_VERSION;
-		if (accessor == null) {
-			try {
-				accessor = Accessors.getMethodAccessor(networkManager.getClass(), "getVersion");
-			} catch (Throwable ex) {
-			}
-		}
-
-		if (accessor != null) {
-			return (Integer) accessor.invoke(networkManager);
-		} else {
-			return MinecraftProtocolVersion.getCurrentVersion();
-		}
+		Integer value = originalChannel.attr(PROTOCOL_KEY).get();
+		return value != null ? value : MinecraftProtocolVersion.getCurrentVersion();
 	}
 
 	@Override
@@ -602,6 +592,24 @@ public class ChannelInjector extends ByteToMessageDecoder implements Injector {
 
 			// Save the channel injector
 			factory.cacheInjector(profile.getName(), this);
+		}
+		
+		if (PACKET_SET_PROTOCOL == null) {
+			try {
+				PACKET_SET_PROTOCOL = PacketType.Handshake.Client.SET_PROTOCOL.getPacketClass();
+			} catch (Throwable ex) {
+				PACKET_SET_PROTOCOL = getClass(); // If we can't find it don't worry about it
+			}
+		}
+
+		if (PACKET_SET_PROTOCOL.equals(packetClass)) {
+			FuzzyReflection fuzzy = FuzzyReflection.fromObject(packet);
+			try {
+				int protocol = (int) fuzzy.invokeMethod(packet, "getProtocol", int.class);
+				originalChannel.attr(PROTOCOL_KEY).set(protocol);
+			} catch (Throwable ex) {
+				// Oh well
+			}
 		}
 	}
 

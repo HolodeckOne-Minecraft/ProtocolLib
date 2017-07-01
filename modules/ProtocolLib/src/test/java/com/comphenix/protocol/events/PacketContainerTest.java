@@ -29,15 +29,15 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-import net.minecraft.server.v1_11_R1.AttributeModifier;
-import net.minecraft.server.v1_11_R1.DataWatcher;
-import net.minecraft.server.v1_11_R1.Entity;
-import net.minecraft.server.v1_11_R1.EntityLightning;
-import net.minecraft.server.v1_11_R1.MobEffect;
-import net.minecraft.server.v1_11_R1.MobEffectList;
-import net.minecraft.server.v1_11_R1.PacketPlayOutBoss;
-import net.minecraft.server.v1_11_R1.PacketPlayOutUpdateAttributes;
-import net.minecraft.server.v1_11_R1.PacketPlayOutUpdateAttributes.AttributeSnapshot;
+import net.minecraft.server.v1_12_R1.AttributeModifier;
+import net.minecraft.server.v1_12_R1.DataWatcher;
+import net.minecraft.server.v1_12_R1.Entity;
+import net.minecraft.server.v1_12_R1.EntityLightning;
+import net.minecraft.server.v1_12_R1.MobEffect;
+import net.minecraft.server.v1_12_R1.MobEffectList;
+import net.minecraft.server.v1_12_R1.PacketPlayOutBoss;
+import net.minecraft.server.v1_12_R1.PacketPlayOutUpdateAttributes;
+import net.minecraft.server.v1_12_R1.PacketPlayOutUpdateAttributes.AttributeSnapshot;
 
 import org.apache.commons.lang.SerializationUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
@@ -545,7 +545,7 @@ public class PacketContainerTest {
 				PacketContainer constructed = new PacketContainer(type);
 
 				if (!registered) {
-					fail("Expected IllegalArgumentException(Packet " + type + " not registered");
+					fail("Expected IllegalArgumentException(Packet " + type + " not registered)");
 				}
 
 				// Initialize default values
@@ -585,15 +585,10 @@ public class PacketContainerTest {
 					// Something is very wrong
 					throw e;
 				}
-			} catch (RuntimeException e) {
-				throw new RuntimeException("Failed to serialize packet " + type, e);
+			} catch (Throwable ex) {
+				throw new RuntimeException("Failed to serialize packet " + type, ex);
 			}
 		}
-	}
-
-	@Test
-	public void testPacketType() {
-		assertEquals(PacketType.Legacy.Server.SET_CREATIVE_SLOT, PacketType.findLegacy(107, Sender.SERVER));
 	}
 
 	// Convert to objects that support equals()

@@ -52,7 +52,6 @@ import com.comphenix.protocol.updater.Updater.UpdateType;
 import com.comphenix.protocol.utility.ChatExtensions;
 import com.comphenix.protocol.utility.EnhancerFactory;
 import com.comphenix.protocol.utility.MinecraftVersion;
-import com.comphenix.protocol.utility.Util;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
@@ -90,7 +89,8 @@ public class ProtocolLib extends JavaPlugin {
 	private enum ProtocolCommand {
 		FILTER,
 		PACKET,
-		PROTOCOL
+		PROTOCOL,
+		LOGGING;
 	}
 
 	/**
@@ -143,6 +143,7 @@ public class ProtocolLib extends JavaPlugin {
 	private CommandProtocol commandProtocol;
 	private CommandPacket commandPacket;
 	private CommandFilter commandFilter;
+	private PacketLogging packetLogging;
 
 	// Whether or not disable is not needed
 	private boolean skipDisable;
@@ -152,14 +153,6 @@ public class ProtocolLib extends JavaPlugin {
 		// Logging
 		logger = getLogger();
 		ProtocolLogger.init(this);
-
-		int java = Util.getJavaVersion();
-		if (java < 8 && !getConfig().getBoolean("ignoreJava", false)) {
-			logger.warning("Detected outdated Java version: Java " + java);
-			logger.warning("It is recommended that you update to Java 8 as soon as possible.");
-			logger.warning("Future versions of ProtocolLib many not support Java " + java + ".");
-			logger.warning("Java 8 will allow for much faster reflection performance.");
-		}
 
 		// Initialize enhancer factory
 		EnhancerFactory.getInstance().setClassLoader(getClassLoader());
@@ -244,8 +237,6 @@ public class ProtocolLib extends JavaPlugin {
 
 		} catch (OutOfMemoryError e) {
 			throw e;
-		} catch (ThreadDeath e) {
-			throw e;
 		} catch (Throwable e) {
 			reporter.reportDetailed(this, Report.newBuilder(REPORT_PLUGIN_LOAD_ERROR).error(e).callerParam(protocolManager));
 			disablePlugin();
@@ -269,10 +260,11 @@ public class ProtocolLib extends JavaPlugin {
 				case PACKET:
 					commandPacket = new CommandPacket(reporter, this, logger, commandFilter, protocolManager);
 					break;
+				case LOGGING:
+					packetLogging = new PacketLogging(this, protocolManager);
+					break;
 				}
 			} catch (OutOfMemoryError e) {
-				throw e;
-			} catch (ThreadDeath e) {
 				throw e;
 			} catch (LinkageError e) {
 				logger.warning("Failed to register command " + command.name() + ": " + e);
@@ -404,6 +396,7 @@ public class ProtocolLib extends JavaPlugin {
 			registerCommand(CommandProtocol.NAME, commandProtocol);
 			registerCommand(CommandPacket.NAME, commandPacket);
 			registerCommand(CommandFilter.NAME, commandFilter);
+			registerCommand(PacketLogging.NAME, packetLogging);
 
 			// Player login and logout events
 			protocolManager.registerEvents(manager, this);
@@ -412,8 +405,6 @@ public class ProtocolLib extends JavaPlugin {
 			// It also performs the update check.
 			createPacketTask(server);
 		} catch (OutOfMemoryError e) {
-			throw e;
-		} catch (ThreadDeath e) {
 			throw e;
 		} catch (Throwable e) {
 			reporter.reportDetailed(this, Report.newBuilder(REPORT_PLUGIN_ENABLE_ERROR).error(e));
@@ -427,8 +418,6 @@ public class ProtocolLib extends JavaPlugin {
 				statistics = new Statistics(this);
 			}
 		} catch (OutOfMemoryError e) {
-			throw e;
-		} catch (ThreadDeath e) {
 			throw e;
 		} catch (IOException e) {
 			reporter.reportDetailed(this, Report.newBuilder(REPORT_METRICS_IO_ERROR).error(e).callerParam(statistics));
@@ -496,7 +485,7 @@ public class ProtocolLib extends JavaPlugin {
 
 			File[] candidates = pluginFolder.listFiles();
 			if (candidates != null) {
-				for (File candidate : pluginFolder.listFiles()) {
+				for (File candidate : candidates) {
 					if (candidate.isFile() && !candidate.equals(loadedFile)) {
 						Matcher match = ourPlugin.matcher(candidate.getName());
 						if (match.matches()) {
@@ -578,8 +567,6 @@ public class ProtocolLib extends JavaPlugin {
 				}
 			}, ASYNC_MANAGER_DELAY, ASYNC_MANAGER_DELAY);
 		} catch (OutOfMemoryError e) {
-			throw e;
-		} catch (ThreadDeath e) {
 			throw e;
 		} catch (Throwable e) {
 			if (packetTask == -1) {
